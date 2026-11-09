@@ -29,6 +29,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @punchin/employee build:native
       - run: pnpm --filter @punchin/employee exec cap sync android
+      - name: Cache verified Gradle distribution
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          artifact="$RUNNER_TEMP/gradle-8.14.3-bin.zip"
+          gh release download v8.14.3 --repo gradle/gradle-distributions --pattern gradle-8.14.3-bin.zip --output "$artifact"
+          echo "bd71102213493060956ec229d946beee57158dbd89d0e62b91bca0fa2c5f3531  $artifact" | sha256sum -c
+          sed -i "s|^distributionUrl=.*|distributionUrl=file://$artifact|" gradle/wrapper/gradle-wrapper.properties
+        working-directory: apps/employee/android
       - name: Cache verified Kotlin compiler
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,7 +50,6 @@ jobs:
           cp "$artifact" "$cache/kotlin-compiler-embeddable-2.2.20.jar"
       - name: Build Android debug and run unit tests
         run: |
-          sed -i "s/gradle-8.14.3-bin.zip/gradle-8.14.3-bin.zip?run=$GITHUB_RUN_ID/" gradle/wrapper/gradle-wrapper.properties
           for attempt in 1 2 3; do
             ./gradlew assembleDebug testDebugUnitTest --no-daemon && exit 0
             if [ "$attempt" = 3 ]; then exit 1; fi
