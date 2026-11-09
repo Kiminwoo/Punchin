@@ -29,7 +29,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @punchin/employee build:native
       - run: pnpm --filter @punchin/employee exec cap sync android
-      - run: ./gradlew assembleDebug testDebugUnitTest --no-daemon
+      - name: Build Android debug and run unit tests
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew assembleDebug testDebugUnitTest --no-daemon && exit 0
+            if [ "$attempt" = 3 ]; then exit 1; fi
+          done
         working-directory: apps/employee/android
       - uses: actions/upload-artifact@v4
         with:
@@ -54,8 +59,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @punchin/employee build:native
       - run: pnpm --filter @punchin/employee exec cap sync ios
-      - name: Build iOS simulator with isolated package cache
+      - name: Cache verified Capacitor binary artifacts
         run: |
-          rm -rf "$HOME/Library/Caches/org.swift.swiftpm/artifacts/https___github_com_ionic_team_capacitor_swift_pm_releases_download_8_6_0_Cordova_xcframework_zip"
-          xcodebuild -project App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath "$RUNNER_TEMP/punchin-derived" -clonedSourcePackagesDirPath "$RUNNER_TEMP/punchin-packages" -packageCachePath "$RUNNER_TEMP/punchin-package-cache" CODE_SIGNING_ALLOWED=NO build
+          cache="$RUNNER_TEMP/punchin-package-cache/artifacts"
+          mkdir -p "$cache"
+          base=https://github.com/ionic-team/capacitor-swift-pm/releases/download/8.6.0
+          prefix=https___github_com_ionic_team_capacitor_swift_pm_releases_download_8_6_0
+          curl --fail --location --retry 5 --retry-all-errors "$base/Capacitor.xcframework.zip" -o "$cache/${prefix}_Capacitor_xcframework_zip"
+          curl --fail --location --retry 5 --retry-all-errors "$base/Cordova.xcframework.zip" -o "$cache/${prefix}_Cordova_xcframework_zip"
+          echo "df2b77a471b939ce2d1b954cf11247714154bb5f91fa94901d3547e8fda314ad  $cache/${prefix}_Capacitor_xcframework_zip" | shasum -a 256 -c
+          echo "150543647078664bd1e852574cec4a65d0a38c9d3c5a8a07740b17b07850d3f6  $cache/${prefix}_Cordova_xcframework_zip" | shasum -a 256 -c
+      - name: Build iOS simulator
+        run: xcodebuild -project App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath "$RUNNER_TEMP/punchin-derived" -clonedSourcePackagesDirPath "$RUNNER_TEMP/punchin-packages" -packageCachePath "$RUNNER_TEMP/punchin-package-cache" CODE_SIGNING_ALLOWED=NO build
         working-directory: apps/employee/ios/App

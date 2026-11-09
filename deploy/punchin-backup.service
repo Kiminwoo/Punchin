@@ -6,4 +6,4 @@ After=docker.service
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/punchin
-ExecStart=/usr/bin/docker compose --env-file /opt/punchin/deploy/.env exec -T api ../../node_modules/.bin/tsx src/backup.ts
+ExecStart=/usr/bin/docker compose --env-file /opt/punchin/deploy/.env exec -T api ./node_modules/.bin/tsx src/backup.ts

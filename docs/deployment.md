@@ -44,7 +44,7 @@ docker compose --env-file deploy/.env -f compose.yaml -f deploy/compose.bootstra
 ## 백업과 복구 훈련
 
 ```bash
-docker compose --env-file deploy/.env exec -T api ../../node_modules/.bin/tsx src/backup.ts
+docker compose --env-file deploy/.env exec -T api ./node_modules/.bin/tsx src/backup.ts
 ```
 
 실행 중 WAL DB의 SQLite online backup을 만들고 무결성을 검사합니다. 파일은 `/backups` 볼륨에 600 권한으로 저장합니다. 기존 목적지는 덮어쓰지 않습니다. 같은 서버의 백업만으로 서버 유실에 대비할 수 없으므로 외부 암호화 보관을 추가해야 합니다.
