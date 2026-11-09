@@ -1,3 +1,5 @@
+import { leaveBalance, requestedLeave, applyLeave } from './leave';
+import { assertOpen } from './operations';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import {
@@ -24,6 +26,7 @@ import { ApiError, digest, hashPassword, token } from './security';
 export type UserRow = SessionUser & {
   status: 'active' | 'inactive' | 'invited';
   password_hash: string | null;
+  reset_required: number;
 };
 type AttendanceRow = {
   id: string;
@@ -49,6 +52,10 @@ type RequestRow = {
   decision_reason: string | null;
   base_version: number;
   field: 'start' | 'end';
+  requested_minutes: number;
+  approved_minutes: number | null;
+  cancellation_status?: 'pending' | 'approved' | 'rejected';
+  cancellation_reason?: string;
 };
 export class Service {
   constructor(
@@ -74,7 +81,9 @@ export class Service {
         throw new ApiError(409, '초기 계정이 이미 존재합니다. 관리자 초대를 사용해 주세요.');
       const id = randomUUID();
       this.db
-        .prepare("INSERT INTO users VALUES(?,?,?,?,?,'active',?,?)")
+        .prepare(
+          "INSERT INTO users(id,email,name,team,role,status,password_hash,created_at) VALUES(?,?,?,?,?,'active',?,?)",
+        )
         .run(id, email, name, '운영', 'admin', hash, this.now().toISOString());
       this.audit(id, 'admin_bootstrapped', id);
       return id;
@@ -95,7 +104,9 @@ export class Service {
       )
         throw new ApiError(409, '현재 설정은 활성·초대 직원 합계 20명까지입니다.');
       this.db
-        .prepare("INSERT INTO users VALUES(?,?,?,?,?,'invited',NULL,?)")
+        .prepare(
+          "INSERT INTO users(id,email,name,team,role,status,password_hash,created_at) VALUES(?,?,?,?,?,'invited',NULL,?)",
+        )
         .run(id, data.email, data.name, data.team, data.role, this.now().toISOString());
       this.db
         .prepare('INSERT INTO invitations VALUES(?,?,?,NULL)')
@@ -175,7 +186,7 @@ export class Service {
   }
   requests(user: SessionUser): RequestView[] {
     return this.all<RequestRow>(
-      `SELECT r.*, u.name FROM requests r JOIN users u ON r.user_id=u.id ${user.role === 'admin' ? '' : 'WHERE r.user_id=?'} ORDER BY r.created_at DESC, r.id DESC`,
+      `SELECT r.*, u.name, c.status cancellation_status, c.reason cancellation_reason FROM requests r JOIN users u ON r.user_id=u.id LEFT JOIN leave_cancellations c ON c.request_id=r.id ${user.role === 'admin' ? '' : 'WHERE r.user_id=?'} ORDER BY r.created_at DESC, r.id DESC`,
       ...(user.role === 'admin' ? [] : [user.id]),
     ).map((r) => ({
       id: r.id,
@@ -191,6 +202,11 @@ export class Service {
       createdAt: r.created_at,
       decisionReason: r.decision_reason ?? undefined,
       baseVersion: r.base_version,
+      requestedMinutes: r.requested_minutes,
+      approvedMinutes: r.approved_minutes ?? undefined,
+      cancellationStatus: r.cancellation_status,
+      cancellationReason: r.cancellation_reason,
+      leaveDays: r.type === '연차' && r.requested_minutes ? r.requested_minutes / 480 : undefined,
     }));
   }
   snapshot(user: SessionUser): Snapshot {
@@ -255,6 +271,7 @@ export class Service {
       policyVersion: POLICY_VERSION,
       locationVerification: this.office().enabled ? 'enabled' : 'not_configured',
       office: this.office(),
+      leave: leaveBalance(this, user.id),
     };
   }
   office(): Office {
@@ -294,6 +311,7 @@ export class Service {
       const now = this.now();
       const date = koreaDate(now);
       const iso = now.toISOString();
+      assertOpen(this, date);
       const office = this.office();
       const fieldwork = this.one(
         "SELECT id FROM requests WHERE user_id=? AND type='외근' AND status='approved' AND start_date<=? AND end_date>=?",
@@ -376,6 +394,7 @@ export class Service {
     )
       throw new ApiError(400, '미래 시각으로 정정할 수 없습니다.');
     return transaction(this.db, () => {
+      assertOpen(this, data.date, data.endDate);
       if (
         ['연차', '오전 반차', '오후 반차'].includes(data.type) &&
         this.one(
@@ -395,7 +414,7 @@ export class Service {
       const id = randomUUID();
       this.db
         .prepare(
-          'INSERT INTO requests(id,user_id,type,start_date,end_date,reason,time,created_at,base_version,field) VALUES(?,?,?,?,?,?,?,?,?,?)',
+          'INSERT INTO requests(id,user_id,type,start_date,end_date,reason,time,created_at,base_version,field,requested_minutes) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
         )
         .run(
           id,
@@ -408,6 +427,7 @@ export class Service {
           this.now().toISOString(),
           base,
           data.field ?? 'start',
+          requestedLeave(data.type, data.date, data.endDate, data.leaveDays),
         );
       this.audit(user.id, 'request_created', id, { type: data.type });
       return { id };
@@ -418,11 +438,13 @@ export class Service {
     id: string,
     status: 'approved' | 'rejected' | 'cancelled',
     reason: string,
+    chargedMinutes?: number,
   ) {
     transaction(this.db, () => {
       const request = this.one<RequestRow>('SELECT * FROM requests WHERE id=?', id);
       if (!request || (user.role !== 'admin' && request.user_id !== user.id))
         throw new ApiError(404, '요청을 찾을 수 없습니다.');
+      assertOpen(this, request.start_date, request.end_date);
       if (request.status !== 'pending')
         throw new ApiError(409, '이미 처리된 요청입니다. 새로고침해 주세요.');
       if (status === 'cancelled' ? request.user_id !== user.id : user.role !== 'admin')
@@ -476,6 +498,7 @@ export class Service {
           requestedStart: request.time,
         });
       }
+      if (status === 'approved') applyLeave(this, user, request, chargedMinutes);
       this.db
         .prepare(
           "UPDATE requests SET status=?, decided_at=?, decided_by=?, decision_reason=? WHERE id=? AND status='pending'",

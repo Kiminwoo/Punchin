@@ -109,3 +109,85 @@ test('unauthenticated login layout and server errors are usable', async ({ page 
   await expect(page.getByRole('alert')).toContainText('이메일 또는 비밀번호');
   await page.screenshot({ path: `test-results/login-${info.project.name}.png`, fullPage: true });
 });
+test('leave debits, approved cancellation, password reset and administrator report are connected', async ({
+  page,
+  browser,
+}, info) => {
+  const context = await browser.newContext({ viewport: info.project.use.viewport });
+  const admin = await context.newPage();
+  const name = `휴가${info.project.name}`;
+  try {
+    await newEmployee(admin, page, name, `leave-${info.project.name}@example.test`);
+    await admin.reload();
+    const account = admin.locator('.employee-row').filter({ hasText: name });
+    await account.getByRole('button', { name: '휴가 잔액', exact: true }).click();
+    const balance = admin.getByRole('dialog');
+    await balance.getByLabel('잔여 연차 (일)').fill('5');
+    await balance.getByLabel('등록·조정 사유').fill('기존 잔액 확인 등록');
+    await balance.getByRole('button', { name: '잔액 저장' }).click();
+    await expect(balance).not.toBeVisible();
+    await page.reload();
+    await expect(page.locator('.leave-summary p strong')).toHaveText('5');
+    await page.getByRole('button', { name: /휴가 등록/ }).click();
+    const form = page.getByRole('dialog');
+    await form.getByLabel('시작일').fill('2026-11-10');
+    await form.getByLabel('종료일').fill('2026-11-10');
+    await form.getByLabel('메모 (선택)', { exact: true }).fill('브라우저 휴가 검증');
+    await form.getByRole('button', { name: '요청 등록', exact: true }).click();
+    await expect(form).not.toBeVisible();
+    await admin
+      .locator('nav:visible')
+      .getByRole('link', { name: /요청 관리/ })
+      .click();
+    await admin.reload();
+    const request = admin
+      .locator('.request-item')
+      .filter({ hasText: name })
+      .filter({ hasText: '브라우저 휴가 검증' });
+    await request.getByRole('button', { name: '승인', exact: true }).click();
+    await admin.getByRole('dialog').getByRole('button', { name: '확인 후 승인' }).click();
+    await expect(request.getByText('승인 완료', { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.locator('.leave-summary p strong')).toHaveText('4');
+    await page
+      .locator('nav:visible')
+      .getByRole('link', { name: /휴가 · 요청/ })
+      .click();
+    await page.getByRole('button', { name: '휴가 취소 요청' }).click();
+    await expect(page.getByText('취소 확인 대기', { exact: true })).toBeVisible();
+    await admin.reload();
+    await request.getByRole('button', { name: '취소 승인', exact: true }).click();
+    await expect(request.getByText('취소', { exact: true })).toBeVisible();
+    await page.goto('/');
+    await expect(page.locator('.leave-summary p strong')).toHaveText('5');
+    await admin.locator('nav:visible').getByRole('link', { name: '우리 팀', exact: true }).click();
+    await account.getByRole('button', { name: '비밀번호 재설정', exact: true }).click();
+    const reset = admin.getByRole('dialog');
+    const code = await reset.getByLabel('일회용 재설정 코드').inputValue();
+    await reset.getByRole('button', { name: '확인', exact: true }).click();
+    await page.reload();
+    await page.getByRole('button', { name: '비밀번호 재설정 코드로 변경' }).click();
+    await page.getByLabel('재설정 코드', { exact: true }).fill(code);
+    await page.getByLabel('새 비밀번호').fill('Replacement-browser-only-42!');
+    await page.getByRole('button', { name: '비밀번호 변경', exact: true }).click();
+    await expect(page.getByRole('heading', { name: `좋은 하루예요, ${name}님` })).toBeVisible();
+    await admin
+      .locator('nav:visible')
+      .getByRole('link', { name: '월별 집계', exact: true })
+      .click();
+    await expect(admin.getByRole('heading', { name: '전사 월별 근태 · 마감' })).toBeVisible();
+    await expect(admin.getByRole('button', { name: '월 마감', exact: true })).toBeDisabled();
+    expect(await admin.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    const download = admin.waitForEvent('download');
+    await admin.getByRole('button', { name: 'CSV 내보내기' }).click();
+    expect((await download).suggestedFilename()).toContain('punchin-2026-11');
+    await admin.screenshot({
+      path: `test-results/report-${info.project.name}.png`,
+      fullPage: true,
+    });
+  } finally {
+    await context.close();
+  }
+});

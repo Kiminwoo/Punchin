@@ -47,6 +47,10 @@ import { AdminOverview } from './pages/AdminOverview';
 import { Settings } from './pages/Settings';
 import { LiveApplication, type LiveRuntime } from './server/LiveApplication';
 import { OfficeSettings } from './server/OfficeSettings';
+import { MfaSettings } from './server/MfaSettings';
+import { saveCsv } from './server/files';
+import { Reports } from './server/Reports';
+import { LeaveSummary } from './server/Leave';
 import { Employees } from './server/Employees';
 export function Application({ audience }: { audience: Audience }) {
   let demo = false;
@@ -136,6 +140,7 @@ function Workspace({ audience, live }: { audience: Audience; live?: LiveRuntime 
     { path: '/attendance', label: '근태 기록', icon: Clock3 },
     { path: '/requests', label: admin ? '요청 관리' : '휴가 · 요청', icon: CalendarDays },
     { path: '/team', label: '우리 팀', icon: Users },
+    ...(admin && live ? [{ path: '/reports', label: '월별 집계', icon: FilePenLine }] : []),
   ];
   const pageTitle =
     nav.find((item) => item.path === location.pathname)?.label ?? '워크스페이스 설정';
@@ -161,7 +166,7 @@ function Workspace({ audience, live }: { audience: Audience; live?: LiveRuntime 
     );
     setNotice('출근 시연 기록을 이 브라우저에 저장했어요.');
   };
-  const download = (records: Attendance[]) => {
+  const download = async (records: Attendance[]) => {
     const rows = [
       ['날짜', '출근', '퇴근', '실근무(분)', '상태'],
       ...records.map((r) => [
@@ -175,12 +180,12 @@ function Workspace({ audience, live }: { audience: Audience; live?: LiveRuntime 
     const csv =
       '\uFEFF' +
       rows.map((row) => row.map((v) => `"${v.replaceAll('"', '""')}"`).join(',')).join('\r\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `punchin-${live ? 'records' : 'demo'}-${workDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      await saveCsv(csv, `punchin-${live ? 'records' : 'demo'}-${workDate}.csv`);
+    } catch (error) {
+      fail(error);
+      return;
+    }
     setNotice(
       live ? '표시된 서버 기록을 CSV로 내보냈어요.' : '화면에 표시된 시연 기록을 CSV로 내보냈어요.',
     );
@@ -363,6 +368,7 @@ function Workspace({ audience, live }: { audience: Audience; live?: LiveRuntime 
             </div>
           )}
           <Routes>
+            {admin && live && <Route path="/reports" element={<Reports runtime={live} />} />}
             <Route
               path="/"
               element={
@@ -524,6 +530,7 @@ function Workspace({ audience, live }: { audience: Audience; live?: LiveRuntime 
                       <TeamPanel compact people={live?.snapshot.people} live={!!live} />
                     </div>
                     <div className="dashboard-side">
+                      {live && <LeaveSummary balance={live.snapshot.leave} />}
                       <CalendarPanel requests={state.requests} />
                       <RequestPanel
                         live={!!live}
@@ -573,10 +580,44 @@ function Workspace({ audience, live }: { audience: Audience; live?: LiveRuntime 
                   live={!!live}
                   busy={live?.busy}
                   currentUserId={user.id}
-                  onStatus={(id, status, reason) => {
+                  onCancelApproved={
+                    live
+                      ? (id) => {
+                          void live
+                            .mutate(`/requests/${id}/cancellation`, {})
+                            .then(() =>
+                              setNotice('휴가 취소를 요청했어요. 승인 후 잔액이 복원됩니다.'),
+                            )
+                            .catch(fail);
+                        }
+                      : undefined
+                  }
+                  onCancellationDecision={
+                    live
+                      ? (id, status, reason) => {
+                          void live
+                            .mutate(
+                              `/admin/requests/${id}/cancellation`,
+                              { status, reason: reason ?? '' },
+                              'PATCH',
+                            )
+                            .then(() => setNotice('휴가 취소 처리 결과를 저장했어요.'))
+                            .catch(fail);
+                        }
+                      : undefined
+                  }
+                  onStatus={(id, status, reason, chargedMinutes) => {
                     if (live) {
                       void live
-                        .mutate(`/requests/${id}`, { status, reason: reason ?? '' }, 'PATCH')
+                        .mutate(
+                          `/requests/${id}`,
+                          {
+                            status,
+                            reason: reason ?? '',
+                            ...(chargedMinutes !== undefined ? { chargedMinutes } : {}),
+                          },
+                          'PATCH',
+                        )
                         .then(() => setNotice('요청 처리 결과를 서버에 저장했어요.'))
                         .catch(fail);
                       return;
@@ -615,7 +656,12 @@ function Workspace({ audience, live }: { audience: Audience; live?: LiveRuntime 
                       setNotice('시연 데이터를 처음 상태로 되돌렸어요.');
                     }}
                   />
-                  {admin && live && <OfficeSettings runtime={live} />}
+                  {admin && live && (
+                    <>
+                      <MfaSettings />
+                      <OfficeSettings runtime={live} />
+                    </>
+                  )}
                 </>
               }
             />
@@ -772,8 +818,8 @@ function Workspace({ audience, live }: { audience: Audience; live?: LiveRuntime 
             <p>
               {live ? (
                 <>
-                  <strong>서버 연결 상태입니다.</strong> 출퇴근·요청은 서버에 저장됩니다. GPS
-                  인증·알림 발송·휴가 잔액·마감은 아직 연결되지 않았습니다.
+                  <strong>서버 연결 상태입니다.</strong> 출퇴근·요청·휴가 잔액·마감은 서버에
+                  저장됩니다. GPS는 관리자 설정에 따라 확인하며 푸시 알림은 아직 사용하지 않습니다.
                 </>
               ) : (
                 <>

@@ -6,11 +6,15 @@ if (existsSync('.env')) process.loadEnvFile('.env');
 const production = process.env.NODE_ENV === 'production';
 if (production && !process.env.APP_ORIGINS)
   throw new Error('운영 환경에는 APP_ORIGINS 설정이 필요합니다.');
+if (process.env.REQUIRE_ADMIN_MFA === 'true' && !process.env.MFA_ENCRYPTION_KEY)
+  throw new Error('관리자 2단계 인증을 요구하려면 MFA_ENCRYPTION_KEY가 필요합니다.');
 const db = openDatabase(resolve(process.env.DATABASE_PATH ?? 'data/punchin.sqlite'));
 const { app } = await createServer({
   db,
   secureCookies: production,
   logger: true,
+  mfaKey: process.env.MFA_ENCRYPTION_KEY,
+  requireAdminMfa: process.env.REQUIRE_ADMIN_MFA === 'true',
   origins: process.env.APP_ORIGINS?.split(',')
     .map((v) => v.trim())
     .filter(Boolean),

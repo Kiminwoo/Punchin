@@ -1,0 +1,9 @@
+[Unit]
+Description=Punchin verified SQLite backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/punchin
+ExecStart=/usr/bin/docker compose --env-file /opt/punchin/deploy/.env exec -T api ../../node_modules/.bin/tsx src/backup.ts

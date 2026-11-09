@@ -1,0 +1,44 @@
+services:
+  api:
+    build:
+      context: .
+      target: api
+    image: punchin-api:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      REQUIRE_ADMIN_MFA: 'true'
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Generate a stable 32-byte base64 key}
+      APP_ORIGINS: https://${EMPLOYEE_DOMAIN:?Set EMPLOYEE_DOMAIN},https://${ADMIN_DOMAIN:?Set ADMIN_DOMAIN}
+    volumes:
+      - punchin-data:/data
+      - punchin-backups:/backups
+    networks: [internal]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  web:
+    build:
+      context: .
+      target: web
+    image: punchin-web:local
+    restart: unless-stopped
+    environment:
+      EMPLOYEE_DOMAIN: ${EMPLOYEE_DOMAIN:?Set EMPLOYEE_DOMAIN}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?Set ADMIN_DOMAIN}
+    ports: ['80:80', '443:443', '443:443/udp']
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [internal]
+networks:
+  internal:
+volumes:
+  punchin-data:
+  punchin-backups:
+  caddy-data:
+  caddy-config:

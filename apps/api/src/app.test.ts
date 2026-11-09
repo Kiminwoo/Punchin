@@ -546,6 +546,50 @@ describe('server authentication and attendance integrity', () => {
       ).statusCode,
     ).toBe(409);
   });
+  it('keeps native bearer sessions separate from browser cookies and revokes them on logout', async () => {
+    const login = await runtime.app.inject({
+      method: 'POST',
+      url: '/api/mobile/auth/login',
+      headers: { 'x-punchin-client': 'native' },
+      payload: { email: 'staff@example.test', password },
+    });
+    expect(login.statusCode).toBe(200);
+    expect(login.headers['set-cookie']).toBeUndefined();
+    const sessionToken = login.json().sessionToken;
+    expect(sessionToken).toHaveLength(43);
+    const headers = { authorization: `Bearer ${sessionToken}` };
+    expect((await runtime.app.inject({ url: '/api/workspace', headers })).statusCode).toBe(200);
+    expect(
+      (
+        await runtime.app.inject({
+          url: '/api/workspace',
+          headers: { cookie: `punchin_session=${sessionToken}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await runtime.app.inject({
+          url: '/api/workspace',
+          headers: { authorization: `Bearer ${employee.cookie.split('=')[1]}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await runtime.app.inject({
+          method: 'POST',
+          url: '/api/attendance/clock',
+          headers: { ...headers, 'idempotency-key': randomUUID() },
+          payload: { action: 'in' },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (await runtime.app.inject({ method: 'POST', url: '/api/auth/logout', headers })).statusCode,
+    ).toBe(200);
+    expect((await runtime.app.inject({ url: '/api/workspace', headers })).statusCode).toBe(401);
+  });
   it('rate limits repeated login failures by identity', async () => {
     for (let i = 0; i < 11; i++) {
       const res = await call(null, 'POST', '/api/auth/login', {
@@ -573,9 +617,103 @@ it('persists accounts and immutable records across database reopening', async ()
     db.close();
     const next = openDatabase(path);
     expect(next.prepare('SELECT count(*) as n FROM attendance').get()).toMatchObject({ n: 1 });
-    expect(next.prepare('SELECT count(*) as n FROM migrations').get()).toMatchObject({ n: 3 });
+    expect(next.prepare('SELECT count(*) as n FROM migrations').get()).toMatchObject({ n: 7 });
     next.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+it('enforces administrator MFA enrollment and TOTP for later web logins', async () => {
+  const { randomBytes } = await import('node:crypto');
+  const OTPAuth = await import('otpauth');
+  const db = openDatabase(':memory:');
+  let now = new Date('2026-11-09T01:00:00Z');
+  const { app, store } = await createServer({
+    db,
+    now: () => now,
+    mfaKey: randomBytes(32).toString('base64'),
+    requireAdminMfa: true,
+  });
+  try {
+    await store.createAdmin('mfa-admin@example.test', '관리자', password);
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { origin },
+      payload: { email: 'mfa-admin@example.test', password },
+    });
+    expect(first.statusCode).toBe(200);
+    const headers = {
+      origin,
+      cookie: `punchin_session=${first.cookies[0]!.value}`,
+      'x-csrf-token': first.json().csrfToken,
+    };
+    const invitation = { email: 'other@example.test', name: '다른 직원', team: '개발' };
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/admin/invitations',
+          headers,
+          payload: invitation,
+        })
+      ).statusCode,
+    ).toBe(403);
+    const enrollment = await app.inject({
+      method: 'POST',
+      url: '/api/auth/mfa/enroll',
+      headers,
+      payload: { password },
+    });
+    expect(enrollment.statusCode).toBe(200);
+    const totp = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(enrollment.json().secret) });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/mfa/confirm',
+          headers,
+          payload: { code: totp.generate({ timestamp: now.getTime() }) },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/admin/invitations',
+          headers,
+          payload: invitation,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          headers: { origin },
+          payload: { email: 'mfa-admin@example.test', password },
+        })
+      ).statusCode,
+    ).toBe(401);
+    now = new Date(now.getTime() + 30000);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          headers: { origin },
+          payload: {
+            email: 'mfa-admin@example.test',
+            password,
+            code: totp.generate({ timestamp: now.getTime() }),
+          },
+        })
+      ).statusCode,
+    ).toBe(200);
+  } finally {
+    await app.close();
+    db.close();
   }
 });

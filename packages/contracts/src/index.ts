@@ -3,6 +3,7 @@ export const POLICY_VERSION = 'gasan-2026-11-v1';
 export const passwordSchema = z.string().min(12, '비밀번호는 12자 이상 입력해 주세요.').max(128);
 export const loginSchema = z
   .object({
+    code: z.string().trim().max(32).optional(),
     email: z
       .email()
       .max(254)
@@ -22,7 +23,11 @@ export const invitationSchema = z
   })
   .strict();
 export const activateSchema = z
-  .object({ token: z.string().min(30).max(100), password: passwordSchema })
+  .object({
+    code: z.string().trim().max(32).optional(),
+    token: z.string().min(30).max(100),
+    password: passwordSchema,
+  })
   .strict();
 export const requestSchema = z
   .object({
@@ -30,6 +35,7 @@ export const requestSchema = z
     date: z.iso.date(),
     endDate: z.iso.date(),
     reason: z.string().trim().max(200),
+    leaveDays: z.number().int().min(1).max(366).optional(),
     field: z.enum(['start', 'end']).optional(),
     time: z
       .string()
@@ -38,6 +44,10 @@ export const requestSchema = z
   })
   .strict()
   .superRefine((r, ctx) => {
+    if (r.type === '연차' && r.date !== r.endDate && !r.leaveDays)
+      ctx.addIssue({ code: 'custom', message: '실제 연차 사용일수를 입력해 주세요.' });
+    if (r.leaveDays && r.type !== '연차')
+      ctx.addIssue({ code: 'custom', message: '연차만 사용일수를 입력할 수 있습니다.' });
     if (r.endDate < r.date)
       ctx.addIssue({ code: 'custom', message: '종료일은 시작일 이후여야 합니다.' });
     if (r.type !== '연차' && r.endDate !== r.date)
@@ -51,6 +61,7 @@ export const requestSchema = z
   });
 export const decisionSchema = z
   .object({
+    chargedMinutes: z.number().int().positive().optional(),
     status: z.enum(['approved', 'rejected', 'cancelled']),
     reason: z.string().trim().max(200).default(''),
   })
@@ -99,6 +110,10 @@ export type RequestView = z.infer<typeof requestSchema> & {
   decisionReason?: string;
   createdAt: string;
   baseVersion?: number;
+  requestedMinutes?: number;
+  approvedMinutes?: number;
+  cancellationStatus?: 'pending' | 'approved' | 'rejected';
+  cancellationReason?: string;
 };
 export type Snapshot = {
   version: 1;
@@ -111,6 +126,7 @@ export type Snapshot = {
   policyVersion: string;
   locationVerification: 'not_configured' | 'enabled';
   office: Office;
+  leave: { balanceMinutes: number; pendingMinutes: number; configured: boolean };
 };
 export const locationSchema = z
   .object({
@@ -143,3 +159,33 @@ export type Office = z.infer<typeof officeSchema> & { revision: number };
 export const clockSchema = z
   .object({ action: z.enum(['in', 'out']), location: locationSchema.optional() })
   .strict();
+
+export type MonthlyReport = {
+  month: string;
+  state: 'open' | 'closed';
+  version: number;
+  generatedAt: string;
+  policyVersion: string;
+  rows: {
+    userId: string;
+    name: string;
+    team: string;
+    date: string;
+    start: string;
+    end: string | null;
+    originalStart: string;
+    originalEnd: string | null;
+    minutes: number | null;
+    needsReview: boolean;
+    corrected: boolean;
+  }[];
+  summary: {
+    employees: number;
+    records: number;
+    minutes: number;
+    incomplete: number;
+    pending: number;
+  };
+  closedAt?: string;
+  closedBy?: string;
+};

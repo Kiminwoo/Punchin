@@ -12,14 +12,15 @@
     "dev:all": "turbo run dev",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
-    "test": "pnpm --filter @punchin/domain test && pnpm --filter @punchin/api test",
+    "test": "pnpm --filter @punchin/domain test && pnpm --filter @punchin/api test && pnpm --filter @punchin/app test",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev:api": "pnpm --filter @punchin/api dev",
     "bootstrap": "pnpm --filter @punchin/api bootstrap",
-    "test:e2e:live": "playwright test --config playwright.live.config.ts"
+    "test:e2e:live": "playwright test --config playwright.live.config.ts",
+    "deploy:init": "node scripts/init-deploy-env.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",

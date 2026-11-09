@@ -20,3 +20,6 @@ test-results/
 *.sqlite-wal
 *.sqlite-shm
 *.backup
+
+# Private operator bootstrap values
+deploy/admin.env

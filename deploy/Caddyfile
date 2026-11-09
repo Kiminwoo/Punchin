@@ -1,0 +1,28 @@
+(common) {
+  encode zstd gzip
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    Permissions-Policy "geolocation=(self), camera=(), microphone=()"
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  }
+  handle /api/* {
+    reverse_proxy api:3001
+  }
+}
+{$EMPLOYEE_DOMAIN} {
+  import common
+  handle {
+    root * /srv/employee
+    try_files {path} /index.html
+    file_server
+  }
+}
+{$ADMIN_DOMAIN} {
+  import common
+  handle {
+    root * /srv/admin
+    try_files {path} /index.html
+    file_server
+  }
+}

@@ -3,10 +3,13 @@ import type { FormEvent } from 'react';
 import { Plus, UserRoundX } from 'lucide-react';
 import type { Person } from '@punchin/contracts';
 import { Badge, Button, Card } from '@punchin/ui';
+import { LeaveBalanceModal } from './Leave';
 import { Modal } from '../components/Primitives';
 import type { LiveRuntime } from './LiveApplication';
 export function Employees({ runtime }: { runtime: LiveRuntime }) {
   const [show, setShow] = useState(false);
+  const [balancePerson, setBalancePerson] = useState<Person | null>(null);
+  const [tokenKind, setTokenKind] = useState<'invite' | 'reset'>('invite');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [team, setTeam] = useState('');
@@ -24,6 +27,7 @@ export function Employees({ runtime }: { runtime: LiveRuntime }) {
         team,
         role,
       })) as { token: string; expiresAt: string };
+      setTokenKind('invite');
       setResult(response);
       setName('');
       setEmail('');
@@ -71,6 +75,30 @@ export function Employees({ runtime }: { runtime: LiveRuntime }) {
                   ? '초대 중'
                   : '비활성'}
             </Badge>
+            {person.status === 'active' && (
+              <Button variant="ghost" onClick={() => setBalancePerson(person)}>
+                휴가 잔액
+              </Button>
+            )}
+            {person.status === 'active' && person.id !== runtime.snapshot.user.id && (
+              <Button
+                variant="ghost"
+                disabled={runtime.busy}
+                onClick={() => {
+                  setError('');
+                  void runtime
+                    .mutate(`/admin/employees/${person.id}/reset-password`)
+                    .then((data) => {
+                      setTokenKind('reset');
+                      setResult(data as { token: string; expiresAt: string });
+                      setShow(true);
+                    })
+                    .catch((e) => setError(e.message));
+                }}
+              >
+                비밀번호 재설정
+              </Button>
+            )}
             {person.status === 'invited' && (
               <Button
                 variant="ghost"
@@ -80,6 +108,7 @@ export function Employees({ runtime }: { runtime: LiveRuntime }) {
                   void runtime
                     .mutate(`/admin/employees/${person.id}/invitation`)
                     .then((response) => {
+                      setTokenKind('invite');
                       setResult(response as { token: string; expiresAt: string });
                       setShow(true);
                     })
@@ -108,19 +137,28 @@ export function Employees({ runtime }: { runtime: LiveRuntime }) {
       </div>
       {show && (
         <Modal
-          title={result ? '초대 코드가 준비됐어요' : '직원 초대'}
+          title={
+            result
+              ? tokenKind === 'reset'
+                ? '비밀번호 재설정 코드'
+                : '초대 코드가 준비됐어요'
+              : '직원 초대'
+          }
           subtitle="실제 이메일은 발송하지 않습니다. 코드를 안전하게 직접 전달해 주세요."
           onClose={() => setShow(false)}
         >
           {result ? (
             <div className="request-form">
               <label>
-                일회용 초대 코드
+                {tokenKind === 'reset' ? '일회용 재설정 코드' : '일회용 초대 코드'}
                 <input readOnly value={result.token} onFocus={(e) => e.target.select()} />
               </label>
               <p className="form-note">
-                72시간 후 만료됩니다. 이 창을 닫기 전에 코드를 복사하세요. 전달받은 직원은 로그인
-                화면에서 ‘초대 코드로 처음 시작하기’를 선택합니다.
+                {tokenKind === 'reset'
+                  ? '30분 후 만료됩니다. 기존 로그인과 비밀번호 사용은 즉시 중지됩니다. 직원은 로그인 화면의 비밀번호 재설정을 선택합니다.'
+                  : '72시간 후 만료됩니다.'}{' '}
+                이 창을 닫기 전에 코드를 복사하세요. 전달받은 직원은 로그인 화면에서 ‘초대 코드로
+                처음 시작하기’를 선택합니다.
               </p>
               <Button onClick={() => setShow(false)}>확인</Button>
             </div>
@@ -201,6 +239,14 @@ export function Employees({ runtime }: { runtime: LiveRuntime }) {
             </Button>
           </div>
         </Modal>
+      )}
+      {balancePerson && (
+        <LeaveBalanceModal
+          runtime={runtime}
+          id={balancePerson.id}
+          name={balancePerson.name}
+          onClose={() => setBalancePerson(null)}
+        />
       )}
     </Card>
   );

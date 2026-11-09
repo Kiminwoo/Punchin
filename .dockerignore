@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/dist
+**/.turbo
+**/data
+**/.env
+**/.env.*
+**/test-results
+**/playwright-report
+**/android
+**/ios
+**/*.sqlite*
+**/*.backup

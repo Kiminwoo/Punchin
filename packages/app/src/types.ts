@@ -8,6 +8,11 @@ export type Request = {
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   name: string;
   time?: string;
+  leaveDays?: number;
+  requestedMinutes?: number;
+  approvedMinutes?: number;
+  cancellationStatus?: 'pending' | 'approved' | 'rejected';
+  cancellationReason?: string;
   field?: 'start' | 'end';
   userId?: string;
   decisionReason?: string;

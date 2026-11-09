@@ -239,11 +239,14 @@ export function LiveApplication({
       audience={audience}
       error={error}
       onRetry={() => void initialize()}
-      onLogin={async (payload, activate) => {
-        const result = await api<SessionResponse>(activate ? '/auth/activate' : '/auth/login', {
-          method: 'POST',
-          body: payload,
-        });
+      onLogin={async (payload, activate, reset) => {
+        const result = await api<SessionResponse>(
+          reset ? '/auth/reset' : activate ? '/auth/activate' : '/auth/login',
+          {
+            method: 'POST',
+            body: payload,
+          },
+        );
         setSession(result);
         changeSession(result);
         await refresh();
@@ -260,11 +263,14 @@ function Login({
   audience: Audience;
   error: string;
   onRetry: () => void;
-  onLogin: (payload: unknown, activate: boolean) => Promise<void>;
+  onLogin: (payload: unknown, activate: boolean, reset?: boolean) => Promise<void>;
 }) {
   const [activate, setActivate] = useState(false);
+  const [reset, setReset] = useState(false);
+  const enrollment = activate || reset;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -274,8 +280,11 @@ function Login({
     setMessage('');
     try {
       await onLogin(
-        activate ? { token: token.trim(), password } : { email: email.trim(), password },
+        enrollment
+          ? { token: token.trim(), password, ...(otp.trim() ? { code: otp.trim() } : {}) }
+          : { email: email.trim(), password, ...(otp.trim() ? { code: otp.trim() } : {}) },
         activate,
+        reset,
       );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : '로그인에 실패했습니다.');
@@ -290,16 +299,22 @@ function Login({
         <span className="eyebrow">
           {audience === 'admin' ? 'ADMIN WORKSPACE' : 'WELCOME TO PUNCHIN'}
         </span>
-        <h1>{activate ? '우리 팀에 오신 걸 환영해요' : '우리 팀의 하루를 시작해요'}</h1>
+        <h1>
+          {reset
+            ? '비밀번호를 다시 설정해요'
+            : activate
+              ? '우리 팀에 오신 걸 환영해요'
+              : '우리 팀의 하루를 시작해요'}
+        </h1>
         <p>
           {activate
             ? '관리자가 전달한 초대 코드로 계정을 활성화하세요.'
             : '회사에서 초대한 계정으로 로그인하세요.'}
         </p>
         <form className="request-form" onSubmit={submit}>
-          {activate ? (
+          {enrollment ? (
             <label>
-              초대 코드
+              {reset ? '재설정 코드' : '초대 코드'}
               <input
                 value={token}
                 required
@@ -321,18 +336,29 @@ function Login({
             </label>
           )}
           <label>
-            {activate ? '새 비밀번호' : '비밀번호'}
+            {enrollment ? '새 비밀번호' : '비밀번호'}
             <input
               type="password"
-              autoComplete={activate ? 'new-password' : 'current-password'}
-              minLength={activate ? 12 : 1}
+              autoComplete={enrollment ? 'new-password' : 'current-password'}
+              minLength={enrollment ? 12 : 1}
               maxLength={128}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </label>
-          {activate && <p className="demo-form-note">비밀번호는 12자 이상으로 설정해 주세요.</p>}
+          {!activate && (
+            <label>
+              인증앱·복구 코드 (설정한 계정만)
+              <input
+                autoComplete="one-time-code"
+                maxLength={32}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+              />
+            </label>
+          )}
+          {enrollment && <p className="demo-form-note">비밀번호는 12자 이상으로 설정해 주세요.</p>}
           {(message || error) && (
             <p role="alert" className="form-error">
               {message || error}
@@ -340,20 +366,34 @@ function Login({
           )}
           <Button disabled={busy} type="submit">
             {busy ? <LoaderCircle size={15} className="spin" /> : <LogIn size={15} />}{' '}
-            {activate ? '계정 활성화' : '로그인'}
+            {reset ? '비밀번호 변경' : activate ? '계정 활성화' : '로그인'}
             <ArrowRight size={14} />
           </Button>
         </form>
         <button
           className="auth-text-button"
           onClick={() => {
-            setActivate(!activate);
+            setActivate(enrollment ? false : true);
+            setReset(false);
             setMessage('');
             setPassword('');
           }}
         >
-          {activate ? '로그인으로 돌아가기' : '초대 코드로 처음 시작하기'}
+          {enrollment ? '로그인으로 돌아가기' : '초대 코드로 처음 시작하기'}
         </button>
+        {!enrollment && (
+          <button
+            className="auth-text-button"
+            onClick={() => {
+              setReset(true);
+              setActivate(false);
+              setMessage('');
+              setPassword('');
+            }}
+          >
+            비밀번호 재설정 코드로 변경
+          </button>
+        )}
         {error && (
           <Button variant="ghost" onClick={onRetry}>
             <RefreshCw size={14} />
@@ -363,7 +403,7 @@ function Login({
         <div className="auth-footnote">
           가산 오피스 · 회사 전용 워크스페이스
           <br />
-          위치 인증은 아직 설정되지 않았습니다.
+          출퇴근 위치는 회사의 근무지 설정에 따라 확인합니다.
         </div>
         {import.meta.env.DEV && (
           <button

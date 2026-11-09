@@ -1,3 +1,5 @@
+import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
+import { NativeSession, nativeApiBase, type SecureStore } from './native-session';
 import type { SessionUser, Snapshot } from '@punchin/contracts';
 export class HttpError extends Error {
   constructor(
@@ -7,11 +9,36 @@ export class HttpError extends Error {
     super(message);
   }
 }
+const native = Capacitor.isNativePlatform()
+  ? new NativeSession(
+      () => nativeApiBase(import.meta.env.VITE_API_BASE_URL),
+      (options) => CapacitorHttp.request(options),
+      registerPlugin<SecureStore>('SecureSession'),
+    )
+  : null;
 let csrf = '';
 export async function api<T>(
   path: string,
   options: { method?: string; body?: unknown; key?: string } = {},
 ): Promise<T> {
+  if (native) {
+    let response: { status: number; data: unknown };
+    try {
+      response = await native.request(path, options);
+    } catch (error) {
+      throw error instanceof Error
+        ? error
+        : new HttpError(0, '서버에 연결하지 못했습니다. 다시 확인해 주세요.');
+    }
+    if (response.status < 200 || response.status >= 300)
+      throw new HttpError(
+        response.status,
+        typeof (response.data as { message?: unknown })?.message === 'string'
+          ? (response.data as { message: string }).message
+          : '요청을 처리하지 못했습니다.',
+      );
+    return response.data as T;
+  }
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {

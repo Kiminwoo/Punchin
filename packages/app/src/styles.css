@@ -2365,3 +2365,78 @@ tr:last-child td {
   accent-color: #315c47;
   flex-shrink: 0;
 }
+.leave-summary {
+  padding: 20px;
+  color: #688157;
+}
+.leave-summary > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.leave-summary strong {
+  font-size: 12px;
+}
+.leave-summary > p {
+  margin: 15px 0 10px;
+}
+.leave-summary > p > strong {
+  font-size: 30px;
+  font-weight: 550;
+}
+.leave-summary > p > span {
+  font-size: 12px;
+  margin-left: 4px;
+}
+.leave-summary > small {
+  font-size: 10px;
+  color: #7a8c6b;
+}
+.report-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0 22px 20px;
+}
+.report-toolbar > span:not(.badge) {
+  flex: 1;
+  min-width: 200px;
+  font-size: 11px;
+  color: #738567;
+}
+.report-month {
+  border: 1px solid var(--border);
+  padding: 7px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: #5a714b;
+}
+.report-message {
+  margin: 0 22px 20px;
+}
+.employee-row {
+  flex-wrap: wrap;
+}
+.employee-row > div {
+  min-width: 160px;
+}
+@media (max-width: 580px) {
+  .employee-row > div {
+    flex-basis: 60%;
+  }
+  .report-toolbar {
+    padding-inline: 17px;
+  }
+  .report-toolbar > .button {
+    flex: 1;
+  }
+  .report-month {
+    font-size: 16px;
+  }
+}
+@media (max-width: 580px) {
+  .section-heading:has(.report-month) {
+    flex-wrap: wrap;
+  }
+}

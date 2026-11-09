@@ -6,7 +6,9 @@
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
-	<key>CFBundleDisplayName</key>
+	<key>NSLocationWhenInUseUsageDescription</key>
+<string>출퇴근 버튼을 누를 때 휴데이터스 사무실 근처인지 확인합니다. 이동 경로는 추적하지 않습니다.</string>
+<key>CFBundleDisplayName</key>
         <string>Punchin</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>

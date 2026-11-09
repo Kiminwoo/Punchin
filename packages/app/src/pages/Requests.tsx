@@ -24,12 +24,21 @@ export function RequestPanel({
   live = false,
   currentUserId,
   busy = false,
+  onCancelApproved,
+  onCancellationDecision,
 }: {
   requests: Request[];
   compact?: boolean;
   onNew: () => void;
   admin?: boolean;
-  onStatus?: (id: string, status: Request['status'], reason?: string) => void;
+  onStatus?: (
+    id: string,
+    status: Request['status'],
+    reason?: string,
+    chargedMinutes?: number,
+  ) => void;
+  onCancelApproved?: (id: string) => void;
+  onCancellationDecision?: (id: string, status: 'approved' | 'rejected', reason?: string) => void;
   live?: boolean;
   currentUserId?: string;
   busy?: boolean;
@@ -37,6 +46,9 @@ export function RequestPanel({
   const [filter, setFilter] = useState('all');
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [cancelReject, setCancelReject] = useState(false);
+  const [approveLeave, setApproveLeave] = useState<Request | null>(null);
+  const [chargeDays, setChargeDays] = useState('');
   const visible = requests.filter((r) => filter === 'all' || r.status === filter);
   return (
     <Card className="requests-card">
@@ -92,20 +104,79 @@ export function RequestPanel({
                 {r.time ? ` · ${r.field === 'end' ? '퇴근' : '출근'} ${r.time}` : ''}
               </span>
               {!compact && r.reason && <p>{r.reason}</p>}
+              {!compact && !!r.requestedMinutes && (
+                <p>
+                  신청 {r.requestedMinutes / 480}일
+                  {r.approvedMinutes !== undefined ? ` · 차감 ${r.approvedMinutes / 480}일` : ''}
+                </p>
+              )}
+              {!compact && r.cancellationReason && <p>취소 처리 사유: {r.cancellationReason}</p>}
               {!compact && r.decisionReason && <p>처리 사유: {r.decisionReason}</p>}
             </div>
             <div className="request-status">
               <Badge tone={statusTone[r.status]}>{statusLabel[r.status]}</Badge>
+              {live && r.cancellationStatus === 'pending' && (
+                <Badge tone="orange">취소 확인 대기</Badge>
+              )}
+              {live &&
+                r.status === 'approved' &&
+                ['연차', '오전 반차', '오후 반차'].includes(r.type) &&
+                !compact && (
+                  <>
+                    {!r.cancellationStatus && r.userId === currentUserId && (
+                      <button
+                        disabled={busy}
+                        className="cancel-request"
+                        onClick={() => onCancelApproved?.(r.id)}
+                      >
+                        휴가 취소 요청
+                      </button>
+                    )}
+                    {r.cancellationStatus === 'pending' && admin && r.userId !== currentUserId && (
+                      <div className="request-buttons">
+                        <button
+                          disabled={busy}
+                          onClick={() => onCancellationDecision?.(r.id, 'approved')}
+                        >
+                          취소 승인
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => {
+                            setCancelReject(true);
+                            setRejectId(r.id);
+                            setRejectReason('');
+                          }}
+                        >
+                          취소 반려
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               {!compact &&
                 r.status === 'pending' &&
                 (admin && (!live || r.userId !== currentUserId) ? (
                   <div className="request-buttons">
-                    <button disabled={busy} onClick={() => onStatus?.(r.id, 'approved')}>
+                    <button
+                      disabled={busy}
+                      onClick={() => {
+                        if (live && ['연차', '오전 반차', '오후 반차'].includes(r.type)) {
+                          setApproveLeave(r);
+                          setChargeDays(
+                            r.type === '연차'
+                              ? (r.leaveDays?.toString() ?? (r.date === r.endDate ? '1' : ''))
+                              : '0.5',
+                          );
+                        } else onStatus?.(r.id, 'approved');
+                      }}
+                    >
                       승인
                     </button>
                     <button
                       disabled={busy}
                       onClick={() => {
+                        setCancelReject(false);
                         setRejectId(r.id);
                         setRejectReason('');
                       }}
@@ -143,7 +214,7 @@ export function RequestPanel({
           <>
             <span>
               {live
-                ? '정정 승인 시 원본을 보존하고 적용합니다. 휴가 잔액은 별도 관리합니다.'
+                ? '정정 원본을 보존합니다. 휴가 승인 시 차감하고 취소 승인 시 복원합니다.'
                 : '승인 시연은 실제 근태·휴가 잔액에 반영되지 않습니다.'}
             </span>
             <Button variant="ghost" className="text-button" onClick={onNew}>
@@ -162,7 +233,8 @@ export function RequestPanel({
             className="request-form"
             onSubmit={(e) => {
               e.preventDefault();
-              onStatus?.(rejectId, 'rejected', rejectReason);
+              if (cancelReject) onCancellationDecision?.(rejectId, 'rejected', rejectReason);
+              else onStatus?.(rejectId, 'rejected', rejectReason);
               setRejectId(null);
             }}
           >
@@ -177,6 +249,42 @@ export function RequestPanel({
             </label>
             <Button disabled={busy || !rejectReason.trim()} type="submit">
               반려 처리
+            </Button>
+          </form>
+        </Modal>
+      )}
+      {approveLeave && (
+        <Modal
+          title="휴가 승인 · 차감 확인"
+          subtitle={`${approveLeave.name} · ${approveLeave.date} ~ ${approveLeave.endDate}`}
+          onClose={() => setApproveLeave(null)}
+        >
+          <form
+            className="request-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onStatus?.(approveLeave.id, 'approved', '', Number(chargeDays) * 480);
+              setApproveLeave(null);
+            }}
+          >
+            <label>
+              실제 차감 일수
+              <input
+                type="number"
+                min={approveLeave.type === '연차' ? 1 : 0.5}
+                max={approveLeave.type === '연차' ? 366 : 0.5}
+                step={approveLeave.type === '연차' ? 1 : 0.5}
+                required
+                value={chargeDays}
+                onChange={(e) => setChargeDays(e.target.value)}
+              />
+            </label>
+            <p className="form-note">
+              연차 1일 8시간, 반차 4시간입니다. 여러 날의 연차는 휴일을 제외한 실제 사용일수를
+              확인해 주세요. 잔액이 부족하면 승인되지 않습니다.
+            </p>
+            <Button type="submit" disabled={busy}>
+              확인 후 승인
             </Button>
           </form>
         </Modal>
@@ -203,6 +311,7 @@ export function RequestForm({
   const [reason, setReason] = useState('');
   const [time, setTime] = useState('');
   const [field, setField] = useState<'start' | 'end'>('start');
+  const [leaveDays, setLeaveDays] = useState('');
   const [error, setError] = useState('');
   const leave = ['연차', '오전 반차', '오후 반차'].includes(type);
   const submit = async (e: FormEvent) => {
@@ -213,6 +322,7 @@ export function RequestForm({
       endDate: type === '연차' ? endDate : date,
       reason,
       ...(type === '기록 정정' ? { time, field } : {}),
+      ...(type === '연차' && date !== endDate ? { leaveDays: Number(leaveDays) } : {}),
     });
     if (!result.success) {
       setError(result.error.issues[0]?.message ?? '입력을 확인해 주세요.');
@@ -271,6 +381,21 @@ export function RequestForm({
             </label>
           )}
         </div>
+        {type === '연차' && date !== endDate && (
+          <label>
+            실제 연차 사용일수
+            <input
+              type="number"
+              min={1}
+              max={366}
+              step={1}
+              required
+              value={leaveDays}
+              onChange={(e) => setLeaveDays(e.target.value)}
+            />
+            <small>주말·공휴일 등 휴가를 쓰지 않는 날은 제외하고 입력하세요.</small>
+          </label>
+        )}
         {type === '기록 정정' && (
           <>
             <label>
@@ -307,7 +432,7 @@ export function RequestForm({
         </label>
         <p className="form-note">
           {leave
-            ? '확인 대기로 등록됩니다. 반차 인정시간과 휴가 잔액은 회사 기준 확정 후 연결됩니다.'
+            ? '확인 대기로 등록됩니다. 연차 1일은 8시간, 반차는 4시간이며 승인 시 잔액에서 차감됩니다.'
             : type === '기록 정정'
               ? '정정 요청은 원본을 덮어쓰지 않습니다. 승인 전에는 원본 기록을 변경하지 않습니다.'
               : '외근 중 이동 경로는 수집하지 않습니다. 승인 전에는 원본 기록을 변경하지 않습니다.'}

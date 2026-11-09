@@ -1,0 +1,6 @@
+services:
+  api:
+    env_file:
+      - deploy/admin.env
+    command: ['../../node_modules/.bin/tsx', 'src/bootstrap.ts']
+    restart: 'no'

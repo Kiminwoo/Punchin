@@ -51,6 +51,38 @@ export function openDatabase(path: string) {
       `BEGIN IMMEDIATE; ALTER TABLE attendance ADD COLUMN corrected_end TEXT; ALTER TABLE requests ADD COLUMN field TEXT NOT NULL DEFAULT 'start'; INSERT INTO migrations VALUES(3,datetime('now')); COMMIT;`,
     );
   }
+  if (!db.prepare('SELECT version FROM migrations WHERE version=4').get()) {
+    db.exec(
+      `BEGIN IMMEDIATE; ALTER TABLE sessions ADD COLUMN transport TEXT NOT NULL DEFAULT 'web' CHECK(transport IN ('web','native')); INSERT INTO migrations VALUES(4,datetime('now')); COMMIT;`,
+    );
+  }
+  if (!db.prepare('SELECT version FROM migrations WHERE version=5').get()) {
+    db.exec(`BEGIN IMMEDIATE;
+      CREATE TABLE month_closures(month TEXT PRIMARY KEY,state TEXT NOT NULL CHECK(state IN ('open','closed')),version INTEGER NOT NULL,snapshot TEXT,closed_at TEXT,closed_by TEXT REFERENCES users(id));
+      CREATE TABLE month_history(id TEXT PRIMARY KEY,month TEXT NOT NULL,version INTEGER NOT NULL,action TEXT NOT NULL,detail TEXT NOT NULL,actor_id TEXT NOT NULL REFERENCES users(id),recorded_at TEXT NOT NULL);
+      CREATE TABLE password_resets(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at TEXT NOT NULL,used_at TEXT);
+      ALTER TABLE users ADD COLUMN reset_required INTEGER NOT NULL DEFAULT 0;
+      INSERT INTO migrations VALUES(5,datetime('now')); COMMIT;`);
+  }
+  if (!db.prepare('SELECT version FROM migrations WHERE version=6').get()) {
+    db.exec(`BEGIN IMMEDIATE;
+      ALTER TABLE requests ADD COLUMN requested_minutes INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE requests ADD COLUMN approved_minutes INTEGER;
+      CREATE TABLE leave_ledger(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL CHECK(kind IN ('adjustment','used','refunded')),minutes INTEGER NOT NULL,request_id TEXT REFERENCES requests(id),reason TEXT NOT NULL,actor_id TEXT NOT NULL REFERENCES users(id),recorded_at TEXT NOT NULL);
+      CREATE UNIQUE INDEX leave_once ON leave_ledger(request_id,kind) WHERE request_id IS NOT NULL;
+      CREATE TABLE leave_cancellations(request_id TEXT PRIMARY KEY REFERENCES requests(id),status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')),requested_at TEXT NOT NULL,decided_at TEXT,decided_by TEXT REFERENCES users(id),reason TEXT);
+      CREATE TRIGGER leave_ledger_no_update BEFORE UPDATE ON leave_ledger BEGIN SELECT RAISE(ABORT,'immutable leave ledger'); END;
+      CREATE TRIGGER leave_ledger_no_delete BEFORE DELETE ON leave_ledger BEGIN SELECT RAISE(ABORT,'immutable leave ledger'); END;
+      UPDATE requests SET requested_minutes=CASE WHEN type='연차' AND start_date=end_date THEN 480 WHEN type IN ('오전 반차','오후 반차') THEN 240 ELSE 0 END;
+      INSERT INTO migrations VALUES(6,datetime('now')); COMMIT;`);
+  }
+  if (!db.prepare('SELECT version FROM migrations WHERE version=7').get()) {
+    db.exec(`BEGIN IMMEDIATE;
+      CREATE TABLE mfa_accounts(user_id TEXT PRIMARY KEY REFERENCES users(id),secret TEXT NOT NULL,enabled INTEGER NOT NULL,last_counter INTEGER NOT NULL);
+      CREATE TABLE mfa_enrollments(user_id TEXT PRIMARY KEY REFERENCES users(id),secret TEXT NOT NULL,expires_at TEXT NOT NULL);
+      CREATE TABLE mfa_recovery(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),used_at TEXT);
+      INSERT INTO migrations VALUES(7,datetime('now')); COMMIT;`);
+  }
   if (path !== ':memory:') chmodSync(path, 0o600);
   return db;
 }
