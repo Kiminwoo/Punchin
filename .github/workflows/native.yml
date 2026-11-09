@@ -30,9 +30,11 @@ jobs:
       - run: pnpm --filter @punchin/employee build:native
       - run: pnpm --filter @punchin/employee exec cap sync android
       - name: Cache verified Kotlin compiler
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           artifact="$RUNNER_TEMP/kotlin-compiler-embeddable-2.2.20.jar"
-          curl --fail --location --connect-timeout 30 --max-time 180 --retry 3 --retry-all-errors 'https://github.com/JetBrains/kotlin/releases/download/v2.2.20/kotlin-compiler-embeddable-2.2.20.jar?source=punchin-validation' -o "$artifact"
+          gh release download v2.2.20 --repo JetBrains/kotlin --pattern kotlin-compiler-embeddable-2.2.20.jar --output "$artifact"
           echo "1c6c3f810bfe6a41abcbc34b3a2ef639f1e3f4aeed3a953a4b0974eea4f41889  $artifact" | sha256sum -c
           cache="$HOME/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.2.20/bb8331b7585e36ea311825b01a1c06860c055fd1"
           mkdir -p "$cache"
@@ -69,13 +71,14 @@ jobs:
       - run: pnpm --filter @punchin/employee build:native
       - run: pnpm --filter @punchin/employee exec cap sync ios
       - name: Cache verified Capacitor binary artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           cache="$RUNNER_TEMP/punchin-package-cache/artifacts"
           mkdir -p "$cache"
-          base=https://github.com/ionic-team/capacitor-swift-pm/releases/download/8.6.0
           prefix=https___github_com_ionic_team_capacitor_swift_pm_releases_download_8_6_0
-          curl --fail --location --connect-timeout 30 --max-time 180 --retry 3 --retry-all-errors "$base/Capacitor.xcframework.zip?source=punchin-validation" -o "$cache/${prefix}_Capacitor_xcframework_zip"
-          curl --fail --location --connect-timeout 30 --max-time 180 --retry 3 --retry-all-errors "$base/Cordova.xcframework.zip?source=punchin-validation" -o "$cache/${prefix}_Cordova_xcframework_zip"
+          gh release download 8.6.0 --repo ionic-team/capacitor-swift-pm --pattern Capacitor.xcframework.zip --output "$cache/${prefix}_Capacitor_xcframework_zip"
+          gh release download 8.6.0 --repo ionic-team/capacitor-swift-pm --pattern Cordova.xcframework.zip --output "$cache/${prefix}_Cordova_xcframework_zip"
           echo "df2b77a471b939ce2d1b954cf11247714154bb5f91fa94901d3547e8fda314ad  $cache/${prefix}_Capacitor_xcframework_zip" | shasum -a 256 -c
           echo "150543647078664bd1e852574cec4a65d0a38c9d3c5a8a07740b17b07850d3f6  $cache/${prefix}_Cordova_xcframework_zip" | shasum -a 256 -c
       - name: Build iOS simulator
