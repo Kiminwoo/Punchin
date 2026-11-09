@@ -23,3 +23,5 @@ test-results/
 
 # Private operator bootstrap values
 deploy/admin.env
+!deploy/.env.duckdns.example
+private-backups/

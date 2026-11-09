@@ -12,7 +12,7 @@
     "dev:all": "turbo run dev",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
-    "test": "pnpm --filter @punchin/domain test && pnpm --filter @punchin/api test && pnpm --filter @punchin/app test",
+    "test": "pnpm --filter @punchin/domain test && pnpm --filter @punchin/api test && pnpm --filter @punchin/app test && pnpm test:deploy",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
@@ -20,7 +20,8 @@
     "dev:api": "pnpm --filter @punchin/api dev",
     "bootstrap": "pnpm --filter @punchin/api bootstrap",
     "test:e2e:live": "playwright test --config playwright.live.config.ts",
-    "deploy:init": "node scripts/init-deploy-env.mjs"
+    "deploy:init": "node scripts/init-deploy-env.mjs",
+    "test:deploy": "node --test scripts/duckdns.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",

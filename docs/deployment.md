@@ -1,6 +1,6 @@
 # 회사 서버 배포 준비
 
-서버 업체는 미정이므로 Docker Compose + Caddy HTTPS + 단일 SQLite 영속 볼륨으로 구성했습니다. 이 문서는 서버/도메인 선택 후 실행할 절차입니다. 실제 회사 서버나 도메인에 배포하지 않았습니다.
+공통 배포 구성은 Docker Compose + Caddy HTTPS + 단일 SQLite 영속 볼륨입니다. 사용자는 **혼자 사용하는 Oracle Always Free + DuckDNS 베타**로 진행하기로 했고 계정 가입부터 필요합니다. 해당 경로는 [Oracle 베타 안내](oracle-beta.md)를 따릅니다. 실제 회사 서버나 도메인에 배포하지 않았습니다.
 
 ## 준비할 것
 

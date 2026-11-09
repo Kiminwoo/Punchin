@@ -72,6 +72,7 @@ pnpm test:e2e:live      # 임시 DB의 실제 API·두 사용자·초대·기록
 개발용 가상 화면은 로그인 화면의 ‘가상 데이터로 화면 시연 보기’ 또는 `/?demo=1`입니다. 실제 서버 데이터와 합치지 않습니다. 개발용 시연을 나가려면 해당 탭의 sessionStorage `punchin-demo-mode`를 삭제하거나 새 브라우저 세션을 사용하세요. 프로덕션 빌드에서는 가상 화면 진입이 비활성화됩니다.
 
 - [Docker·HTTPS 배포와 복구](docs/deployment.md)
+- [Oracle 무료 서버·DuckDNS 1인 베타 시작](docs/oracle-beta.md)
 - [사내 파일럿 QA 실행표](docs/qa.md)
 - [서버·보안·운영](docs/server.md)
 - [GPS 설정과 실제 사무실 검증](docs/location.md)

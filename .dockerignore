@@ -11,3 +11,5 @@
 **/ios
 **/*.sqlite*
 **/*.backup
+deploy/admin.env
+**/private-backups
