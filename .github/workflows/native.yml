@@ -23,6 +23,8 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @punchin/employee build:native
@@ -52,5 +54,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @punchin/employee build:native
       - run: pnpm --filter @punchin/employee exec cap sync ios
-      - run: xcodebuild -project App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+      - name: Build iOS simulator with isolated package cache
+        run: |
+          rm -rf "$HOME/Library/Caches/org.swift.swiftpm/artifacts/https___github_com_ionic_team_capacitor_swift_pm_releases_download_8_6_0_Cordova_xcframework_zip"
+          xcodebuild -project App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath "$RUNNER_TEMP/punchin-derived" -clonedSourcePackagesDirPath "$RUNNER_TEMP/punchin-packages" -packageCachePath "$RUNNER_TEMP/punchin-package-cache" CODE_SIGNING_ALLOWED=NO build
         working-directory: apps/employee/ios/App
