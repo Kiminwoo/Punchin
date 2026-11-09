@@ -31,6 +31,7 @@ jobs:
       - run: pnpm --filter @punchin/employee exec cap sync android
       - name: Build Android debug and run unit tests
         run: |
+          sed -i "s/gradle-8.14.3-bin.zip/gradle-8.14.3-bin.zip?run=$GITHUB_RUN_ID/" gradle/wrapper/gradle-wrapper.properties
           for attempt in 1 2 3; do
             ./gradlew assembleDebug testDebugUnitTest --no-daemon && exit 0
             if [ "$attempt" = 3 ]; then exit 1; fi
@@ -65,8 +66,8 @@ jobs:
           mkdir -p "$cache"
           base=https://github.com/ionic-team/capacitor-swift-pm/releases/download/8.6.0
           prefix=https___github_com_ionic_team_capacitor_swift_pm_releases_download_8_6_0
-          curl --fail --location --retry 5 --retry-all-errors "$base/Capacitor.xcframework.zip" -o "$cache/${prefix}_Capacitor_xcframework_zip"
-          curl --fail --location --retry 5 --retry-all-errors "$base/Cordova.xcframework.zip" -o "$cache/${prefix}_Cordova_xcframework_zip"
+          curl --fail --location --connect-timeout 30 --max-time 180 --retry 3 --retry-all-errors "$base/Capacitor.xcframework.zip?run=$GITHUB_RUN_ID" -o "$cache/${prefix}_Capacitor_xcframework_zip"
+          curl --fail --location --connect-timeout 30 --max-time 180 --retry 3 --retry-all-errors "$base/Cordova.xcframework.zip?run=$GITHUB_RUN_ID" -o "$cache/${prefix}_Cordova_xcframework_zip"
           echo "df2b77a471b939ce2d1b954cf11247714154bb5f91fa94901d3547e8fda314ad  $cache/${prefix}_Capacitor_xcframework_zip" | shasum -a 256 -c
           echo "150543647078664bd1e852574cec4a65d0a38c9d3c5a8a07740b17b07850d3f6  $cache/${prefix}_Cordova_xcframework_zip" | shasum -a 256 -c
       - name: Build iOS simulator
