@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+node_modules
+dist
+.turbo
+test-results
+playwright-report
+apps/employee/android
+apps/employee/ios

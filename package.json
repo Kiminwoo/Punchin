@@ -1,0 +1,31 @@
+{
+  "name": "punchin",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @punchin/employee dev --host 0.0.0.0",
+    "dev:admin": "pnpm --filter @punchin/admin dev --host 0.0.0.0",
+    "dev:all": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "pnpm --filter @punchin/domain test && pnpm --filter @punchin/api test",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "test:e2e": "playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "dev:api": "pnpm --filter @punchin/api dev",
+    "bootstrap": "pnpm --filter @punchin/api bootstrap",
+    "test:e2e:live": "playwright test --config playwright.live.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "prettier": "3.9.10",
+    "turbo": "2.11.10",
+    "typescript": "7.0.2"
+  },
+  "type": "module"
+}

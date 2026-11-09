@@ -1,0 +1,32 @@
+{
+  "name": "@punchin/employee",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "native:android": "pnpm build && cap sync android && cap open android",
+    "native:ios": "pnpm build && cap sync ios && cap open ios",
+    "native:add:android": "cap add android",
+    "native:add:ios": "cap add ios"
+  },
+  "dependencies": {
+    "@punchin/app": "workspace:*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/android": "8.6.0",
+    "@capacitor/ios": "8.6.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.2.1",
+    "@tailwindcss/vite": "4.3.5",
+    "tailwindcss": "4.3.5",
+    "vite": "8.3.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@capacitor/cli": "8.6.0"
+  }
+}
